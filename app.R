@@ -5,6 +5,7 @@ library(dplyr) # Data manipulate
 library(babynames) # Data set
 library(gapminder)
 library(DT)
+library(plotly)
 
 # Load data ####
 species <- read.csv(file = 'data/species.csv')
@@ -16,6 +17,8 @@ species <- filter(species, Conservation.Status %in% status_to_keep)
 features_to_keep <- c('Park.Name', 'Category', 'Order', 'Family', 'Common.Names',
                       'Abundance', 'Conservation.Status')
 species <- species[features_to_keep]
+status_list <- unique(species$Conservation.Status)
+category_list <- unique(species$Category)
 
 # Create dashboard UI #### 
 ui <- dashboardPage(
@@ -25,10 +28,10 @@ ui <- dashboardPage(
         width = 350,
         sidebarMenu(
             menuItem("Home", tabName = "home", icon = icon("home")),
-            menuItem("Page 1", tabName = "page1", icon = icon("dashboard")),
-            menuItem("Page 2", tabName = "page2", icon = icon("dashboard")),
+            menuItem("Species status", tabName = "status", icon = icon("dashboard")),
+            menuItem("Species abundance", tabName = "abundance", icon = icon("dashboard")),
             menuItem("Page 3", tabName = "page3", icon = icon("dashboard")),
-            menuItem("Page 4", tabName = "page4", icon = icon("dashboard")),
+            menuItem("Map", tabName = "map", icon = icon("map")),
             menuItem("Source data tables", tabName = "tables", icon = icon("table")),
             menuItem("Info", tabName = "info", icon = icon("info-circle"))
         )
@@ -82,35 +85,118 @@ ui <- dashboardPage(
                     )
             ),
             
-            # Second tab content
-            tabItem(tabName = "page1")
+            # Status tab content
+            tabItem(tabName = "status",
+                    fluidRow(
+                        column(width = 6,
+                               box(
+                                   status = "primary", width = NULL,
+                                   selectInput('status_status',
+                                               'Select status',
+                                               choices = status_list
+                                   )
+                               )
+                        ),
+                        column(width = 6,
+                               box(
+                                   status = "info", width = NULL,
+                                   selectInput('status_category',
+                                               'Select category',
+                                               choices = category_list
+                                   )
+                               )
+                        )
+                    ),
+                    fluidRow(
+                        column(width = 12,
+                               box(
+                                   title = "Status and families in categories",
+                                   status = "success", width = NULL,
+                                   plotOutput('status_status_category_plot')
+                               )
+                        )
+                    ),
+                    fluidRow(
+                        infoBoxOutput("status_totalspecies"),
+                        infoBoxOutput("status_percentofall"),
+                        infoBoxOutput("status_biggest_family")
+                    ),
+                    fluidRow(
+                        column(width = 12,
+                            box(
+                                title = "Proportions of endangered status in categories without species of concern",
+                                status = "warning", width = NULL,
+                                plotOutput('status_status_category_plot_stacked')
+                            )
+                        )
+                    )
+            ),
+            # Abundance tab content
+            tabItem(tabName = "abundance",
+                    fluidRow(
+                        box(
+                            status = "info", width = NULL,
+                            selectInput('abundance_category',
+                                        'Select category',
+                                        choices = category_list
+                            )
+                        )
+                    ),
+                    fluidRow(
+                        column(width = 12,
+                               box(
+                                   title = "Abundance of families",
+                                   status = "primary", width = NULL,
+                                   plotOutput('abundance_bar_abundance')
+                               )
+                        )
+                    ),
+                    fluidRow(
+                        column(width = 6,
+                               box(
+                                   title = "Abundance of all categories",
+                                   status = "success", width = NULL,
+                                   plotOutput('abundance_circle_abundance_all')
+                               )
+                        ),
+                        column(width = 6,
+                               box(
+                                   title = "Abundance of choosen categories",
+                                   status = "warning", width = NULL,
+                                   plotOutput('abundance_circle_abundance_single')
+                               )
+                        )
+                    )
+                ),
+            # Third tab content
+            
+            # Map tab content
+            
+            # Tables tab content
+            tabItem(tabName = "tables",
+                      tabsetPanel(tabPanel('Species',
+                                           DT::dataTableOutput('tables_speciesTable')),
+                                  tabPanel('Parks',
+                                           DT::dataTableOutput('tables_parksTable')
+                                           )
+                      )
+                    ),
+            # Info tab content
+            tabItem(tabName = "info",
+                    fluidRow(
+                        infoBoxOutput("info_authors"),
+                        infoBoxOutput("info_datasource"),
+                        infoBoxOutput("info_version")
+                    )
+                )
+            
         )
     )
 )
-# ui <- fluidPage(
-#   titlePanel("Life Expactation and GDP per Capita"),
-#   sidebarLayout(
-#     sidebarPanel(
-#       selectInput('continent',
-#                   'Select continent',
-#                   choices = continents),
-#       sliderInput('year',
-#                   'Select year',
-#                   min = 1952,
-#                   max = 2007,
-#                   value = 1972)
-#     ),
-#     mainPanel(
-#       tabsetPanel(tabPanel('Plot',
-#                            plotOutput('PlotTopNames')),
-#                   tabPanel('Table',
-#                            DT::dataTableOutput('tableNames'))
-#       )
-#     )
-#   )
-# )
+
 # Create dashboard logic ####
 server <- function(input, output) {
+    # HOME PAGE
     output$home_species_data_text <- renderUI({
         HTML(paste("Name of the park in which species lives.", "Species category.", 
               "Species order.", "Species family.", "Species common names.", 
@@ -120,22 +206,133 @@ server <- function(input, output) {
         HTML(paste("Park code.", "Park name.", "State in which park is located", 
                    "Park area in acres.", "Park geographical coordinates", sep="<br/>"))
     })
+    # STATUS
+    output$status_status_category_plot <- renderPlot({
+        species %>%
+            filter(Conservation.Status == input$status_status, Category == input$status_category) %>%
+            group_by(Family, Order) %>%
+            summarise(Count = n()) %>%
+            # plot_ly(fill = ~Family, x = ~Order, y = ~Count, 
+            #         name = paste(input$status_status, " - " , input$status_category)) %>%
+            # layout(barmode = 'group')
+            ggplot(aes(fill = Family, x = Order, y = Count)) +
+            geom_bar(position=position_dodge2(), stat = "identity") +
+            ggtitle(paste(input$status_status, " - " , input$status_category))
+    })
+    output$status_totalspecies <- renderInfoBox({
+        species_status <- species %>%
+            filter(Conservation.Status == input$status_status, Category == input$status_category) %>%
+            group_by(Family, Order) %>%
+            summarise(Count = n())
+        infoBox(
+            "Total species", paste0(sum(species_status$Count)), icon = icon("list"),
+            color = "purple"
+        )
+    })
+    output$status_percentofall <- renderInfoBox({
+        species_status <- species %>%
+            filter(Conservation.Status == input$status_status, Category == input$status_category) %>%
+            group_by(Family, Order) %>%
+            summarise(Count = n())
+        species_status_a <- species %>%
+            summarise(Count = n())
+        perc <- sum(species_status$Count)/species_status$Count
+        infoBox(
+            "Percentage of all species", paste0(perc, "%"), icon = icon("list"),
+            color = "purple"
+        )
+    })
+    output$status_biggest_family <- renderInfoBox({
+        species_status <- species %>%
+            filter(Conservation.Status == input$status_status, Category == input$status_category) %>%
+            group_by(Family, Order) %>%
+            summarise(Count = n())
+        infoBox(
+            "Biggest family", paste0(max(species_status$Count)), icon = icon("list"),
+            color = "teal"
+        )
+    })
+    output$status_status_category_plot_stacked <- renderPlot({
+        species %>%
+            filter(Conservation.Status != "Species of Concern") %>%
+            group_by(Category, Conservation.Status) %>%
+            summarise(Count = n()) %>%
+            ggplot(aes(fill = Conservation.Status, x = Category, y = Count)) +
+                geom_bar(position="stack", stat = "identity") +
+                coord_flip()
+    })
+    
+    # ABUNDANCE
+    output$abundance_bar_abundance <- renderPlot({
+        abundance_to_keep <- c('Abundant', 'Common', 'Uncommon', 'Occasional', 'Rare')
+        species %>%
+            filter(Abundance %in% abundance_to_keep, Category == input$abundance_category) %>%
+            group_by(Order, Abundance) %>%
+            summarise(Count = n()) %>%
+            ggplot(aes(fill = Abundance, x = Order, y = Count)) +
+            geom_bar(position="stack", stat = "identity")
+    })
+    output$abundance_circle_abundance_all <- renderPlot({
+        abundance_to_keep <- c('Abundant', 'Common', 'Uncommon', 'Occasional', 'Rare')
+        species_temp <- species %>%
+            filter(Abundance %in% abundance_to_keep) %>%
+            group_by(Order, Abundance) %>%
+            summarise(Count = n())
+        species_temp$fraction = species_temp$Count / sum(species_temp$Count) 
+        species_temp$ymax = cumsum(species_temp$fraction)
+        species_temp$ymin = c(0, head(species_temp$ymax, n=-1)) 
+        species_temp %>%
+            ggplot(aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=Abundance)) +
+                geom_rect() +
+                coord_polar(theta="y")
+            # summarise(Ymax = cumsum(Fraction)) %>%
+            # summarise(Ymin = c(0, head(Ymax, n=-1))) %>%
+            # summarise(LabelPosition = (Ymax + Ymin) / 2) %>%
+            # summarise(Label = paste0(Abundance, "\n value: ", Count)) %>%
+            # ggplot(aes(ymax=Ymax, ymin=Ymin, xmax=4, xmin=3, fill=Abundance)) +
+            #     geom_rect() +
+            #     geom_text( x=2, aes(y=LabelPosition, label=Label, color=Abundance), size=6) + # x here controls label position (inner / outer)
+            #     scale_fill_brewer(palette=3) +
+            #     scale_color_brewer(palette=3) +
+            #     coord_polar(theta="y") +
+            #     xlim(c(-1, 4)) +
+            #     theme_void() +
+            #     theme(legend.position = "none")
+            # ggplot(aes(fill = Abundance, x = Order, y = Count)) +
+            #     geom_bar(position="stack", stat = "identity")
+    })
+    
+    # MAPS
+    
+    # TABLES
+    output$tables_speciesTable <- DT::renderDataTable({
+        species %>%
+            DT::datatable(filter = "top")
+    })
+    output$tables_parksTable <- DT::renderDataTable({
+        parks %>%
+            DT::datatable(filter = "top")
+    })
+    # INFO
+    output$info_authors <- renderInfoBox({
+        infoBox(
+            "Authors", HTML(paste("Piotr Kopycki",br(), "Szymon Szczot")), icon = icon("user-friends"),
+            color = "navy"
+        )
+    })
+    output$info_datasource <- renderInfoBox({
+        infoBox(
+            "Data source", paste0("https://www.kaggle.com/nationalparkservice/park-biodiversity"), icon = icon("database"),
+            color = "orange"
+        )
+    })
+    output$info_version <- renderInfoBox({
+        infoBox(
+            "Version", paste0("v1.0_2021"), icon = icon("code"),
+            color = "maroon"
+        )
+    })
 }
 
-# server <- function(input, output, session){
-#   output$tableNames <- DT::renderDataTable({
-#     gapminder %>%
-#       filter(continent == input$continent) %>%
-#       filter(year == input$year) %>%
-#       DT::datatable()
-#   })
-#   
-#   output$PlotTopNames <- renderPlot({
-#     gapminder %>%
-#       filter(continent == input$continent, year == input$year) %>%
-#       ggplot(aes(x = gdpPercap, y = lifeExp)) +
-#       geom_point(size=2, shape=16)
-#   })
-# }
 # Run dashboard ####
 shinyApp(ui = ui, server = server)
