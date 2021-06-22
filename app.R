@@ -44,8 +44,7 @@ ui <- dashboardPage(
             menuItem("Home", tabName = "home", icon = icon("home")),
             menuItem("Species status", tabName = "status", icon = icon("dashboard")),
             menuItem("Species abundance", tabName = "abundance", icon = icon("dashboard")),
-            menuItem("Page 3", tabName = "page3", icon = icon("dashboard")),
-            menuItem("Map", tabName = "map", icon = icon("map")),
+            menuItem("Maps", tabName = "map", icon = icon("map")),
             menuItem("Source data tables", tabName = "tables", icon = icon("table")),
             menuItem("Info", tabName = "info", icon = icon("info-circle"))
         )
@@ -188,6 +187,51 @@ ui <- dashboardPage(
             
             # Map tab content
             
+      tabItem(tabName = "map",
+              
+              fluidRow(
+              column(width = 4,
+                     height = 5,
+                     box(
+                       solidHeader=TRUE,
+                       title = "Parks Area",
+                       status = "primary", width = NULL,
+                       plotOutput('map1')
+                     )
+              ),
+              
+              column(width = 4,
+                     height = 5,
+                     box(
+                       solidHeader=TRUE,
+                       title = "Parks Names",
+                       status = "primary", width = NULL,
+                       plotOutput('map2')
+                     )
+              ),
+              column(width = 4,
+                     height = 5,
+                     box(
+                       solidHeader=TRUE,
+                       title = "Parks Location",
+                       status = "warning", width = NULL,
+                       plotOutput('map3')
+                     )
+                )
+              ),
+              fluidRow(
+                infoBoxOutput("max_area"),
+                infoBoxOutput("lowest_area"),
+                infoBoxOutput("most_parks_in_state")
+              ),
+              fluidRow(
+                width = 8,
+                tabsetPanel(tabPanel('Parks',
+                                     DT::dataTableOutput('parks_table'))
+                )
+                )
+
+      ),
             # Tables tab content
             tabItem(tabName = "tables",
                       tabsetPanel(tabPanel('Species',
@@ -257,7 +301,7 @@ server <- function(input, output) {
         infoBox(
             "Smallest family", 
             HTML(paste(min(species_status$Count), br(), species_status$Family[which.min(species_status$Count)])), 
-            icon = icon("list"),
+            icon = icon("arrow-circle-down"),
             color = "yellow"
         )
     })
@@ -269,7 +313,7 @@ server <- function(input, output) {
         infoBox(
             "Biggest family", 
             HTML(paste(max(species_status$Count), br(), species_status$Family[which.max(species_status$Count)])), 
-            icon = icon("list"),
+            icon = icon("arrow-alt-circle-up"),
             color = "fuchsia"
         )
     })
@@ -356,6 +400,66 @@ server <- function(input, output) {
     
     # MAPS
     
+  output$map2 <- renderPlot({
+    ggplot(parks, aes(x=Longitude, y=Latitude)) +   
+    borders("world", colour=NA, fill="olivedrab3")  +
+    scale_x_continuous(name="Longitude", limits=c(-180, -20)) +
+    scale_y_continuous(name="Latitude", limits=c(0, 80)) +
+    theme(panel.background = element_rect(fill = "lightblue", colour = "azure1")) +
+    geom_text(aes(x=Longitude, y= Latitude, label=Park.Code),
+              color = "gray20", check_overlap = T, size = 3)
+    
+  })
+  
+  output$map1 <- renderPlot({
+    ggplot(parks, aes(x=Longitude, y= Latitude)) +   
+      borders("world", colour=NA, fill="wheat1")  +
+      geom_point(color="blue", alpha = .2, size = parks$Acres/500000) +
+      scale_x_continuous(name="Longitude", limits=c(-170, -30)) +
+      scale_y_continuous(name="Latitude", limits=c(0, 80)) +
+      theme(panel.background = element_rect(fill = "azure1", colour = "azure1")) +
+      geom_text(aes(x=Longitude, y= Latitude, label=""),
+                color = "gray20", check_overlap = T, size = 3)
+  })
+  
+  output$map3 <- renderPlot({
+    ggplot(parks, aes(x=Longitude, y= Latitude)) +   
+      borders("world", colour=NA, fill="wheat1") +
+      borders("state", colour="white", fill=NA) +
+      geom_point(color="blue", alpha = .2, size = 3) +
+      scale_x_continuous(name="Longitude", limits=c(-170, -30)) +
+      scale_y_continuous(name="Latitude", limits=c(0, 80)) +
+      theme(panel.background = element_rect(fill = "azure1", colour = "azure1")) +
+      geom_text(aes(x=Longitude, y= Latitude, label=""),
+                color = "gray20", check_overlap = T, size = 3)
+  })
+  
+  output$parks_table <- DT::renderDataTable({
+    parks %>%
+      DT::datatable(filter = "top")
+  })
+  
+  
+  output$max_area <- renderInfoBox({
+    infoBox(
+      "Largest Park", HTML(paste("Wrangell - St Elias National Park and Preserve",br(), "8323148 Acres")), icon = icon("arrow-alt-circle-up"),
+      color = "olive"
+    )
+  })
+  
+  output$lowest_area <- renderInfoBox({
+    infoBox(
+      "Smallest Park", HTML(paste("Hot Springs National Park",br(), "5550 Acres")), icon = icon("arrow-circle-down"),
+      color = "maroon"
+    )
+  })
+  output$most_parks_in_state <- renderInfoBox({
+    infoBox(
+      "State with most parks", HTML(paste("Alaska",br(), "8")), icon = icon("calculator"),
+      color = "orange"
+    )
+  })
+  
     # TABLES
     output$tables_speciesTable <- DT::renderDataTable({
         species %>%
