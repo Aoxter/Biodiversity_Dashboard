@@ -1,3 +1,4 @@
+library(RColorBrewer)
 library(shiny) # Main library
 library(shinydashboard) # Pretty dashboard layouts
 library(ggplot2) # Plots
@@ -111,21 +112,21 @@ ui <- dashboardPage(
                         column(width = 12,
                                box(
                                    title = "Status and families in categories",
-                                   status = "success", width = NULL,
+                                   status = "success", solidHeader = TRUE, width = NULL,
                                    plotOutput('status_status_category_plot')
                                )
                         )
                     ),
                     fluidRow(
                         infoBoxOutput("status_totalspecies"),
-                        infoBoxOutput("status_percentofall"),
+                        infoBoxOutput("status_smallest_family"),
                         infoBoxOutput("status_biggest_family")
                     ),
                     fluidRow(
                         column(width = 12,
                             box(
                                 title = "Proportions of endangered status in categories without species of concern",
-                                status = "warning", width = NULL,
+                                status = "primary", solidHeader = TRUE, width = NULL,
                                 plotOutput('status_status_category_plot_stacked')
                             )
                         )
@@ -134,11 +135,13 @@ ui <- dashboardPage(
             # Abundance tab content
             tabItem(tabName = "abundance",
                     fluidRow(
-                        box(
-                            status = "info", width = NULL,
-                            selectInput('abundance_category',
-                                        'Select category',
-                                        choices = category_list
+                        column(width = 12,
+                            box(
+                                status = "info", width = NULL,
+                                selectInput('abundance_category',
+                                            'Select category',
+                                            choices = category_list
+                                )
                             )
                         )
                     ),
@@ -146,7 +149,7 @@ ui <- dashboardPage(
                         column(width = 12,
                                box(
                                    title = "Abundance of families",
-                                   status = "primary", width = NULL,
+                                   status = "primary", solidHeader = TRUE, width = NULL,
                                    plotOutput('abundance_bar_abundance')
                                )
                         )
@@ -155,14 +158,14 @@ ui <- dashboardPage(
                         column(width = 6,
                                box(
                                    title = "Abundance of all categories",
-                                   status = "success", width = NULL,
+                                   status = "success", solidHeader = TRUE, width = NULL,
                                    plotOutput('abundance_circle_abundance_all')
                                )
                         ),
                         column(width = 6,
                                box(
                                    title = "Abundance of choosen categories",
-                                   status = "warning", width = NULL,
+                                   status = "warning", solidHeader = TRUE, width = NULL,
                                    plotOutput('abundance_circle_abundance_single')
                                )
                         )
@@ -224,22 +227,25 @@ server <- function(input, output) {
             filter(Conservation.Status == input$status_status, Category == input$status_category) %>%
             group_by(Family, Order) %>%
             summarise(Count = n())
+        species_status_a <- species %>%
+            summarise(Count = n())
         infoBox(
-            "Total species", paste0(sum(species_status$Count)), icon = icon("list"),
-            color = "purple"
+            "Total species", 
+            HTML(paste(sum(species_status$Count), "/", species_status_a$Count, br(), round((sum(species_status$Count) / species_status_a$Count) * 100, 1), "%")),
+            icon = icon("list"),
+            color = "green"
         )
     })
-    output$status_percentofall <- renderInfoBox({
+    output$status_smallest_family <- renderInfoBox({
         species_status <- species %>%
             filter(Conservation.Status == input$status_status, Category == input$status_category) %>%
             group_by(Family, Order) %>%
             summarise(Count = n())
-        species_status_a <- species %>%
-            summarise(Count = n())
-        perc <- sum(species_status$Count)/species_status$Count
         infoBox(
-            "Percentage of all species", paste0(perc, "%"), icon = icon("list"),
-            color = "purple"
+            "Smallest family", 
+            HTML(paste(min(species_status$Count), br(), species_status$Family[which.min(species_status$Count)])), 
+            icon = icon("list"),
+            color = "yellow"
         )
     })
     output$status_biggest_family <- renderInfoBox({
@@ -248,8 +254,10 @@ server <- function(input, output) {
             group_by(Family, Order) %>%
             summarise(Count = n())
         infoBox(
-            "Biggest family", paste0(max(species_status$Count)), icon = icon("list"),
-            color = "teal"
+            "Biggest family", 
+            HTML(paste(max(species_status$Count), br(), species_status$Family[which.max(species_status$Count)])), 
+            icon = icon("list"),
+            color = "fuchsia"
         )
     })
     output$status_status_category_plot_stacked <- renderPlot({
@@ -259,7 +267,8 @@ server <- function(input, output) {
             summarise(Count = n()) %>%
             ggplot(aes(fill = Conservation.Status, x = Category, y = Count)) +
                 geom_bar(position="stack", stat = "identity") +
-                coord_flip()
+                coord_flip() +
+                scale_fill_manual(values = c("#FFDB6D", "#C4961A", "#D16103", "#C3D7A4", "#4E84C4", "#52854C"))
     })
     
     # ABUNDANCE
@@ -272,34 +281,64 @@ server <- function(input, output) {
             ggplot(aes(fill = Abundance, x = Order, y = Count)) +
             geom_bar(position="stack", stat = "identity")
     })
-    output$abundance_circle_abundance_all <- renderPlot({
+    output$abundance_circle_abundance_all <- renderPlot(res = 200, {
+        greens_palette <- brewer.pal(name="Greens",n=9)[3:7]
         abundance_to_keep <- c('Abundant', 'Common', 'Uncommon', 'Occasional', 'Rare')
         species_temp <- species %>%
             filter(Abundance %in% abundance_to_keep) %>%
-            group_by(Order, Abundance) %>%
+            group_by(Abundance) %>%
             summarise(Count = n())
+        # Compute percentages
         species_temp$fraction = species_temp$Count / sum(species_temp$Count) 
+        # Compute the cumulative percentages (top of each rectangle)
         species_temp$ymax = cumsum(species_temp$fraction)
+        # Compute the bottom of each rectangle
         species_temp$ymin = c(0, head(species_temp$ymax, n=-1)) 
+        # Compute label position
+        species_temp$labelPosition <- (species_temp$ymax + species_temp$ymin) / 2
+        # Compute a good label
+        species_temp$label <- paste0(species_temp$Abundance, "\n", species_temp$Count)
         species_temp %>%
             ggplot(aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=Abundance)) +
                 geom_rect() +
-                coord_polar(theta="y")
-            # summarise(Ymax = cumsum(Fraction)) %>%
-            # summarise(Ymin = c(0, head(Ymax, n=-1))) %>%
-            # summarise(LabelPosition = (Ymax + Ymin) / 2) %>%
-            # summarise(Label = paste0(Abundance, "\n value: ", Count)) %>%
-            # ggplot(aes(ymax=Ymax, ymin=Ymin, xmax=4, xmin=3, fill=Abundance)) +
-            #     geom_rect() +
-            #     geom_text( x=2, aes(y=LabelPosition, label=Label, color=Abundance), size=6) + # x here controls label position (inner / outer)
-            #     scale_fill_brewer(palette=3) +
-            #     scale_color_brewer(palette=3) +
-            #     coord_polar(theta="y") +
-            #     xlim(c(-1, 4)) +
-            #     theme_void() +
-            #     theme(legend.position = "none")
-            # ggplot(aes(fill = Abundance, x = Order, y = Count)) +
-            #     geom_bar(position="stack", stat = "identity")
+                # x here controls label position (inner / outer)
+                geom_text( x=1.5, aes(y=labelPosition, label=label, color=Abundance), size=2) + 
+                scale_fill_manual(values=greens_palette) +
+                scale_color_manual(values=greens_palette) +
+                coord_polar(theta="y") +
+                xlim(c(-1, 4)) +
+                theme_void() +
+                theme(legend.position = "none")
+    })
+    output$abundance_circle_abundance_single <- renderPlot(res = 200, {
+        oranges_palette <- brewer.pal(name="Oranges",n=9)[3:7]
+        #my_palette <- c(brewer.pal(name="Greens",n=9)[2], brewer.pal(name="Greens",n=9)[3], brewer.pal(name="Greens",n=9)[5], brewer.pal(name="Greens",n=9)[7], brewer.pal(name="Greens",n=9)[9])
+        abundance_to_keep <- c('Abundant', 'Common', 'Uncommon', 'Occasional', 'Rare')
+        species_temp <- species %>%
+            filter(Abundance %in% abundance_to_keep, Category == input$abundance_category) %>%
+            group_by(Abundance) %>%
+            summarise(Count = n())
+        # Compute percentages
+        species_temp$fraction = species_temp$Count / sum(species_temp$Count) 
+        # Compute the cumulative percentages (top of each rectangle)
+        species_temp$ymax = cumsum(species_temp$fraction)
+        # Compute the bottom of each rectangle
+        species_temp$ymin = c(0, head(species_temp$ymax, n=-1)) 
+        # Compute label position
+        species_temp$labelPosition <- (species_temp$ymax + species_temp$ymin) / 2
+        # Compute a good label
+        species_temp$label <- paste0(species_temp$Abundance, "\n", species_temp$Count)
+        species_temp %>%
+            ggplot(aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=Abundance)) +
+            geom_rect() +
+            # x here controls label position (inner / outer)
+            geom_text( x=1.5, aes(y=labelPosition, label=label, color=Abundance), size=2) + 
+            scale_fill_manual(values=oranges_palette) +
+            scale_color_manual(values=oranges_palette) +
+            coord_polar(theta="y") +
+            xlim(c(-1, 4)) +
+            theme_void() +
+            theme(legend.position = "none")
     })
     
     # MAPS
