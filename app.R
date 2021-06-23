@@ -6,19 +6,19 @@ library(ggplot2) # Plots
 library(dplyr) # Data manipulate
 library(babynames) # Data set
 library(gapminder)
-install.packages("plotly")
 library(plotly)
 library(DT)
 library(plotly)
 library(sf)          # classes and functions for vector data
 library(raster)      # classes and functions for raster data
 library(spData)        # load geographic data
-library(spDataLarge)   # load larger geographic data
+#library(spDataLarge)   # load larger geographic data
 library(maps)
 library(mapproj)
 library(purrr)
 library(dplyr)
-install.packages(c("maps", "mapproj"))
+library(leaflet)
+library(leaflet.extras)
 
 
 # Load data ####
@@ -123,7 +123,7 @@ ui <- dashboardPage(
                     fluidRow(
                         column(width = 12,
                                box(
-                                   title = "Status and families in categories",
+                                   title = "Status and families",
                                    status = "success", solidHeader = TRUE, width = NULL,
                                    plotOutput('status_status_category_plot')
                                )
@@ -137,7 +137,7 @@ ui <- dashboardPage(
                     fluidRow(
                         column(width = 12,
                             box(
-                                title = "Proportions of endangered status in categories without species of concern",
+                                title = "Proportions of conservation statuses",
                                 status = "primary", solidHeader = TRUE, width = NULL,
                                 plotOutput('status_status_category_plot_stacked')
                             )
@@ -183,55 +183,78 @@ ui <- dashboardPage(
                         )
                     )
                 ),
-            # Third tab content
             
             # Map tab content
             
-      tabItem(tabName = "map",
+            tabItem(tabName = "map",
               
-              fluidRow(
-              column(width = 4,
-                     height = 5,
-                     box(
-                       solidHeader=TRUE,
-                       title = "Parks Area",
-                       status = "primary", width = NULL,
-                       plotOutput('map1')
-                     )
-              ),
-              
-              column(width = 4,
-                     height = 5,
-                     box(
-                       solidHeader=TRUE,
-                       title = "Parks Names",
-                       status = "primary", width = NULL,
-                       plotOutput('map2')
-                     )
-              ),
-              column(width = 4,
-                     height = 5,
-                     box(
-                       solidHeader=TRUE,
-                       title = "Parks Location",
-                       status = "warning", width = NULL,
-                       plotOutput('map3')
-                     )
-                )
-              ),
-              fluidRow(
-                infoBoxOutput("max_area"),
-                infoBoxOutput("lowest_area"),
-                infoBoxOutput("most_parks_in_state")
-              ),
-              fluidRow(
-                width = 8,
-                tabsetPanel(tabPanel('Parks',
-                                     DT::dataTableOutput('parks_table'))
-                )
-                )
+                  fluidRow(
+                  column(width = 4,
+                         height = 5,
+                         box(
+                           solidHeader=TRUE,
+                           title = "Parks Area",
+                           status = "danger", width = NULL,
+                           plotOutput('map1')
+                         )
+                  ),
+                  
+                  column(width = 4,
+                         height = 5,
+                         box(
+                           solidHeader=TRUE,
+                           title = "Parks Names",
+                           status = "success", width = NULL,
+                           plotOutput('map2')
+                         )
+                  ),
+                  column(width = 4,
+                         height = 5,
+                         box(
+                           solidHeader=TRUE,
+                           title = "Parks Location",
+                           status = "info", width = NULL,
+                           plotOutput('map3')
+                         )
+                    )
+                  ),
+                  fluidRow(
+                    infoBoxOutput("lowest_area"),
+                    infoBoxOutput("max_area"),
+                    infoBoxOutput("most_parks_in_state")
+                  ),
+                  fluidRow(
+                    column(width = 4,
+                           box(
+                             solidHeader=TRUE,
+                             title = "Species in parks - controls",
+                             status = "danger", width = NULL,
+                             sliderInput("map_species_range", "Species", min=21, max=220,
+                                         value = c(21,220), step = 1
+                             )
+                           )
+                    ),
+                    column(
+                      width = 4,
+                      box(
+                        solidHeader=TRUE,
+                        title = "Species in parks",
+                        status = "success", width = NULL,
+                        leafletOutput('map_species')
+                      )
+                    ),
+                    column(
+                      width = 4,
+                      box(
+                        solidHeader=TRUE,
+                        title = "Parks",
+                        status = "info", width = NULL,
+                        DT::dataTableOutput('parks_table')
+                      )
+                    )
+                  )
 
-      ),
+            ),
             # Tables tab content
             tabItem(tabName = "tables",
                       tabsetPanel(tabPanel('Species',
@@ -400,65 +423,105 @@ server <- function(input, output) {
     
     # MAPS
     
-  output$map2 <- renderPlot({
-    ggplot(parks, aes(x=Longitude, y=Latitude)) +   
-    borders("world", colour=NA, fill="olivedrab3")  +
-    scale_x_continuous(name="Longitude", limits=c(-180, -20)) +
-    scale_y_continuous(name="Latitude", limits=c(0, 80)) +
-    theme(panel.background = element_rect(fill = "lightblue", colour = "azure1")) +
-    geom_text(aes(x=Longitude, y= Latitude, label=Park.Code),
-              color = "gray20", check_overlap = T, size = 3)
+    output$map2 <- renderPlot({
+      ggplot(parks, aes(x=Longitude, y=Latitude)) +   
+      borders("world", colour=NA, fill="olivedrab3")  +
+      scale_x_continuous(name="Longitude", limits=c(-180, -20)) +
+      scale_y_continuous(name="Latitude", limits=c(0, 80)) +
+      theme(panel.background = element_rect(fill = "lightblue", colour = "azure1")) +
+      geom_text(aes(x=Longitude, y= Latitude, label=Park.Code),
+                color = "gray20", check_overlap = T, size = 3)
+      
+    })
     
-  })
-  
-  output$map1 <- renderPlot({
-    ggplot(parks, aes(x=Longitude, y= Latitude)) +   
-      borders("world", colour=NA, fill="wheat1")  +
-      geom_point(color="blue", alpha = .2, size = parks$Acres/500000) +
-      scale_x_continuous(name="Longitude", limits=c(-170, -30)) +
-      scale_y_continuous(name="Latitude", limits=c(0, 80)) +
-      theme(panel.background = element_rect(fill = "azure1", colour = "azure1")) +
-      geom_text(aes(x=Longitude, y= Latitude, label=""),
-                color = "gray20", check_overlap = T, size = 3)
-  })
-  
-  output$map3 <- renderPlot({
-    ggplot(parks, aes(x=Longitude, y= Latitude)) +   
-      borders("world", colour=NA, fill="wheat1") +
-      borders("state", colour="white", fill=NA) +
-      geom_point(color="blue", alpha = .2, size = 3) +
-      scale_x_continuous(name="Longitude", limits=c(-170, -30)) +
-      scale_y_continuous(name="Latitude", limits=c(0, 80)) +
-      theme(panel.background = element_rect(fill = "azure1", colour = "azure1")) +
-      geom_text(aes(x=Longitude, y= Latitude, label=""),
-                color = "gray20", check_overlap = T, size = 3)
-  })
-  
-  output$parks_table <- DT::renderDataTable({
-    parks %>%
-      DT::datatable(filter = "top")
-  })
-  
-  
-  output$max_area <- renderInfoBox({
-    infoBox(
-      "Largest Park", HTML(paste("Wrangell - St Elias National Park and Preserve",br(), "8323148 Acres")), icon = icon("arrow-alt-circle-up"),
-      color = "olive"
-    )
-  })
-  
-  output$lowest_area <- renderInfoBox({
-    infoBox(
-      "Smallest Park", HTML(paste("Hot Springs National Park",br(), "5550 Acres")), icon = icon("arrow-circle-down"),
-      color = "maroon"
-    )
-  })
-  output$most_parks_in_state <- renderInfoBox({
-    infoBox(
-      "State with most parks", HTML(paste("Alaska",br(), "8")), icon = icon("calculator"),
-      color = "orange"
-    )
-  })
+    output$map1 <- renderPlot({
+      ggplot(parks, aes(x=Longitude, y= Latitude)) +   
+        borders("world", colour=NA, fill="wheat1")  +
+        geom_point(color="blue", alpha = .2, size = parks$Acres/500000) +
+        scale_x_continuous(name="Longitude", limits=c(-170, -30)) +
+        scale_y_continuous(name="Latitude", limits=c(0, 80)) +
+        theme(panel.background = element_rect(fill = "azure1", colour = "azure1")) +
+        geom_text(aes(x=Longitude, y= Latitude, label=""),
+                  color = "gray20", check_overlap = T, size = 3)
+    })
+    
+    output$map3 <- renderPlot({
+      ggplot(parks, aes(x=Longitude, y= Latitude)) +   
+        borders("world", colour=NA, fill="wheat1") +
+        borders("state", colour="white", fill=NA) +
+        geom_point(color="blue", alpha = .2, size = 3) +
+        scale_x_continuous(name="Longitude", limits=c(-170, -30)) +
+        scale_y_continuous(name="Latitude", limits=c(0, 80)) +
+        theme(panel.background = element_rect(fill = "azure1", colour = "azure1")) +
+        geom_text(aes(x=Longitude, y= Latitude, label=""),
+                  color = "gray20", check_overlap = T, size = 3)
+    })
+    
+    output$parks_table <- DT::renderDataTable({
+      parks_small <- parks[c("Park.Code", "Park.Name", "Acres")]
+      parks_small %>%
+        DT::datatable(filter = "top")
+    })
+    
+    
+    output$max_area <- renderInfoBox({
+      infoBox(
+        "Largest Park", HTML(paste("Wrangell - St Elias National Park and Preserve",br(), "8323148 Acres")), icon = icon("arrow-alt-circle-up"),
+        color = "olive"
+      )
+    })
+    
+    output$lowest_area <- renderInfoBox({
+      infoBox(
+        "Smallest Park", HTML(paste("Hot Springs National Park",br(), "5550 Acres")), icon = icon("arrow-circle-down"),
+        color = "maroon"
+      )
+    })
+    output$most_parks_in_state <- renderInfoBox({
+      infoBox(
+        "State with most parks", HTML(paste("Alaska",br(), "8")), icon = icon("calculator"),
+        color = "light-blue"
+      )
+    })
+    
+    species_parks_temp <- species %>%
+      group_by(Park.Name) %>%
+      summarise(Species.Count = n())
+    
+    species_parks <- merge(x = species_parks_temp, y = parks)
+    
+    filteredData <- reactive({
+      species_parks[species_parks$Species.Count >= input$map_species_range[1] & species_parks$Species.Count <= input$map_species_range[2],]
+    })
+    
+    
+    output$map_species <- renderLeaflet({
+      map_pal <- colorFactor(
+        palette = 'Spectral',
+        domain = species_parks$Species.Count
+      )
+      leaflet(species_parks) %>% addTiles() %>%
+        fitBounds(~min(Longitude), ~min(Latitude), ~max(Longitude), ~max(Latitude)) %>%
+        addCircles(data = species_parks, lat = ~ Latitude, lng = ~ Longitude,
+                                  weight = 1, radius = ~Species.Count*1000, popup = ~as.character(Species.Count),
+                                  label = ~as.character(paste0(Park.Name, ": ", Species.Count)),
+                                  color = ~map_pal(Species.Count), fillOpacity = 0.7)
+    })
+    
+    observe({
+      map_pal <- colorFactor(
+        palette = 'Spectral',
+        domain = species_parks$Species.Count
+      )
+      
+      leafletProxy("map_species", data = filteredData()) %>%
+        clearShapes() %>%
+        fitBounds(~min(Longitude)-10, ~min(Latitude)-10, ~max(Longitude)+10, ~max(Latitude)+10) %>%
+        addCircles(lat = ~ Latitude, lng = ~ Longitude,
+                                  weight = 1, radius = ~Species.Count*1000,
+                                  label = ~as.character(paste0(Park.Name, ": ", Species.Count)),
+                                  color = ~map_pal(Species.Count), fillOpacity = 0.7)
+    })
   
     # TABLES
     output$tables_speciesTable <- DT::renderDataTable({
@@ -484,7 +547,7 @@ server <- function(input, output) {
     })
     output$info_version <- renderInfoBox({
         infoBox(
-            "Version", paste0("v1.0_2021"), icon = icon("code"),
+            "Version", paste0("v1.0/2021"), icon = icon("code"),
             color = "maroon"
         )
     })
