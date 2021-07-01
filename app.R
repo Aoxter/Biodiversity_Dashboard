@@ -1,22 +1,17 @@
-
 library(RColorBrewer)
 library(shiny) # Main library
 library(shinydashboard) # Pretty dashboard layouts
 library(ggplot2) # Plots
 library(dplyr) # Data manipulate
-library(babynames) # Data set
 library(gapminder)
 library(plotly)
 library(DT)
-library(plotly)
 library(sf)          # classes and functions for vector data
 library(raster)      # classes and functions for raster data
 library(spData)        # load geographic data
-#library(spDataLarge)   # load larger geographic data
 library(maps)
 library(mapproj)
 library(purrr)
-library(dplyr)
 library(leaflet)
 library(leaflet.extras)
 
@@ -50,6 +45,7 @@ ui <- dashboardPage(
         )
     ),
     dashboardBody(
+      tags$head(tags$style(HTML(".content {height: 90vh; overflow-y: auto;}"))),             
         tabItems(
             # Home tab content
             tabItem(tabName = "home",
